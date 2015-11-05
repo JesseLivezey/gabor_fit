@@ -3,7 +3,7 @@ import h5py, os
 import numpy as np
 from functools import wraps
 
-from plot import plot_gabors
+from gabor_fit.plot import plot_gabors
 
 
 def generate_gabor(pixels, x, y, theta, stdx, stdy, lamb, phase):
@@ -43,7 +43,7 @@ def generate_gabor(pixels, x, y, theta, stdx, stdy, lamb, phase):
     yp = (xx - x) * np.sin(deg2rad * theta) - (yy - y) * np.cos(deg2rad * theta)
     gabor = (np.exp(-xp**2 / (2. * stdx**2) - yp**2 / (2. * stdy**2)) *
              np.sin(unit2rad * (xp / lamb) - deg2rad * phase))
-    norm = (gabor**2).sum()
+    norm = np.sqrt((gabor**2).sum())
     return gabor/norm
 
 def _generate_fixed_loc_set(pixels, x, y, theta, stdx, stdy, lamb, phase):
@@ -94,7 +94,94 @@ def generate_fixed_loc_set(pixels, x, y, *args):
     largs = tuple(np.linspace(*arg, endpoint=False) for arg in args)
     return _generate_fixed_loc_set(pixels, x, y, *largs)
 
+
+def compare(dicts, gabors):
+    """
+    Finds best fit for dicts.
+
+    Parameters
+    ----------
+    dicts : ndarray
+        dicts, features
+    gabors : ndarray
+        Parameter dims then feature dims.
+
+    Returns
+    -------
+    indxs : ints
+        Indices in params.
+    vals : floats
+        Inner products.
+    """
+    shape = gabors.shape
+    gabors = gabors.reshape(np.prod(shape[:-2]), -1)
+    # Normalize dicts
+    norms = np.linalg.norm(dicts, axis=1)[:, np.newaxis]
+    dicts = dicts/norms
+
+    overlaps = dicts.dot(gabors.T)
+    indxs = overlaps.argmax(axis=1)
+    vals = overlaps[range(indxs.size), indxs]
+    indxs = np.unravel_index(indxs, shape[:-2])
+    return (indxs, vals)
+
+class GaborSet(object):
+    """
+    Fit gabor filters to a dictionary.
+
+    Parameters
+    ----------
+    pixels : tuple of ints
+        Height and width of patch.
+    theta : array
+        Rotations of gabor in plane in degrees.
+    stdx : array
+        Widths of gaussian window along rot(x) in pixels.
+    stdy : array
+        Widths of gaussian window along rot(y) in pixels.
+    lambda : array
+        Wavelengths of sine funtion in pixels along rot(x).
+    phase : array
+        Phases of sine function in degrees.
+    """
+    def __init__(self, pixels, theta, stdx, stdy, lamb, phase):
+        self.pixels = pixels
+        self.theta = theta
+        self.stdx = stdx
+        self.stdy = stdy
+        self.lamb = lamb
+        self.phase = phase
+    
+    def fit(self, dicts):
+    """
+    Fit gabor filters to a dictionary.
+
+    Parameters
+    ----------
+    dicts : ndarray
+        batch, dim
+    """
+    n_dicts = dicts.shape[0]
+    best_fits = np.zeros(n_dicts, 7)
+    best_vals = np.zeros(n_dicts)
+    for xx in xrange(pixels[0]):
+        for yy in xrange(pixels[1]):
+            gabors = generate_fixed_loc_set(pixels, xx, yy, theta, stdx,
+                                            stdy, lamb, phase)
+            indxs, vals = compare(dicts, gabors)
+            for ii in xrange(n_dicts):
+                if vals[ii] > best_vals[ii]:
+                    best_vals[ii] == vals[ii]
+                    best_fits = self.param_values[indxs]
+    return best_fits
+
+def fit(dicts):
+
 if __name__ == '__main__':
-    gabors = generate_fixed_loc_set((16, 16), 5, 5, (0, 360, 8), (1, 5, 5), (1, 5, 5), (2, 10, 2), (0, 360, 4))
+    gabors = generate_fixed_loc_set((16, 16), 5, 5, (0, 360, 2), (1, 5, 2), (1, 5, 2), (2, 10, 2), (0, 360, 2))
+    indxs, vals = compare(gabors.reshape(-1, 256), gabors)
+    print indxs.shape
+    for ii in range(5):
+        print indxs[ii], indxs[ii].shape
     gabors = gabors.reshape(-1, 256)
     plot_gabors(gabors)
