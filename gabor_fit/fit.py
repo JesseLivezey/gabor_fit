@@ -30,7 +30,7 @@ def setup_graph():
     x_prime = T.cos(theta)*(pos_x-x) -T.sin(theta)*(pos_y-y)
     y_prime = T.sin(theta)*(pos_x-x) +T.cos(theta)*(pos_y-y)
 
-    envelope = T.exp(-x_prime**2/T.exp(lvxp)-y_prime**2/T.exp(lvyp))
+    envelope = T.exp(-x_prime**2/T.exp(lvxp)/2.-y_prime**2/T.exp(lvyp)/2.)
     phase = T.sin(lkxp * x_prime+phip)
     gabor = envelope * phase
 
@@ -137,6 +137,31 @@ def split_params(params):
     return x, y, theta, phi, lkx, lvx, lvy
 
 def standardize_params(*params):
+    """Convert parameters from internal representation to standard Gabor
+    parameters.
+
+    Parameters
+    ----------
+    x, y, theta, phi, lkx, lvx, lvy
+        Either a combines vector or split parameters.
+
+    Returns
+    -------
+    x : float
+       Center of the Gabor in the x direction in pixels.
+    y : float
+       Center of the Gabor in the y direction in pixels.
+    theta : float
+       Rotation of the Gabor in the plane.
+    phi : float
+       Phase of the Gabor.
+    kx : float
+       Wavevector of Gabor (2*pi/lambda).
+    vx : float
+        Variance of the Gabor along the oscilation direction.
+    vy : float
+        Variance of the Gabor perpendictular to the oscilation direction.
+    """
     if len(params) == 1:
         x, y, theta, phi, lkx, lvx, lvy = split_params(params)
     else:
@@ -151,28 +176,9 @@ def standardize_params(*params):
 
 
 class GaborFit(object):
+    """Fit Gabor parameters to patches and visualize Gabors."""
     def __init__(self):
         self.data = theano.shared(np.empty((1,1,1), dtype='float32'))
-
-        """
-        (params, mse, se, grad, gabor,
-         n_x_s, n_y_s)  = fit_only_envelope_function(self.data)
-        self._fit_only_envelope = theano.function([params], [mse, grad],
-                                                  givens={n_x_s: self.data.shape[0],
-                                                          n_y_s: self.data.shape[1]})
-        self._fit_only_envelope_se = theano.function([params], se,
-                                                     givens={n_x_s: self.data.shape[0],
-                                                             n_y_s: self.data.shape[1]})
-
-        (params, mse, se, grad, gabor,
-         n_x_s, n_y_s)  = fit_envelope_function(self.data)
-        self._fit_envelope = theano.function([params], [mse, grad],
-                                             givens={n_x_s: self.data.shape[0],
-                                                     n_y_s: self.data.shape[1]})
-        self._fit_envelope_se = theano.function([params], se,
-                                                givens={n_x_s: self.data.shape[0],
-                                                        n_y_s: self.data.shape[1]})
-        """
 
         (params, mse, se, grad, gabor,
          n_x_s, n_y_s)  = fit_x_y_function(self.data)
@@ -202,17 +208,6 @@ class GaborFit(object):
                                                      givens={n_x_s: self.data.shape[0],
                                                              n_y_s: self.data.shape[1]})
 
-        """
-        (params, mse, se, grad, gabor,
-         n_x_s, n_y_s)  = fit_theta_phi_function(self.data)
-        self._fit_theta_phi = theano.function([params], [mse, grad],
-                                              givens={n_x_s: self.data.shape[0],
-                                                      n_y_s: self.data.shape[1]})
-        self._fit_theta_phi_se = theano.function([params], se,
-                                                 givens={n_x_s: self.data.shape[0],
-                                                         n_y_s: self.data.shape[1]})
-        """
-
         (params, mse, se, grad, gabor,
          n_x_s, n_y_s)  = fit_all_function(self.data)
         self._fit_all = theano.function([params], [mse, grad],
@@ -237,6 +232,25 @@ class GaborFit(object):
         self._make_envelope = theano.function([params_s, n_x_s, n_y_s], envelope)
 
     def fit(self, X, var_init=.05):
+        """Given image patches, find best-fit Gabor parameters.
+
+        Parameters
+        ----------
+        X : ndarray (n_x, n_y, n_batch)
+            Image patches for fitting.
+        var_init : float
+            Ballpark variance initialization scaled by dim**2.
+
+        Returns
+        -------
+        x : list
+            List of all parameter setting during fitting.
+        best_params : ndarray
+            Internal parameter vector for best parameters.
+        best_se : ndarray
+            Squared-error for best parameters settings for each element of the
+            batch.
+        """
         # Calculate different versions of the data
         n_x, n_y, n_samples = X.shape
         init = np.zeros(7*n_samples)
@@ -286,14 +300,10 @@ class GaborFit(object):
             res = minimize(func, init, method='L-BFGS-B', jac=True)
             x.append(res.x)
             params = res.x
-            """
-            se = self._fit_x_y_se(params)
-            best_se, best_params = choose_best(best_se, best_params, se, params)
-            """
-
-            self.data.set_value(X.astype('float32'))
 
             x.append(best_params)
+
+            self.data.set_value(X.astype('float32'))
 
             func = self._fit_theta_phi_lkx
             func_se = self._fit_theta_phi_lkx_se
@@ -326,17 +336,6 @@ class GaborFit(object):
         best_se, best_params = choose_best(best_se, best_params, se, params)
 
         x.append(best_params)
-
-        """
-        # Fit all
-        func = self._fit_all
-        res = minimize(func, best_params, method='L-BFGS-B', jac=True)
-        params = res.x
-        se = self._fit_all_se(params)
-        best_se, best_params = choose_best(best_se, best_params, se, params)
-
-        x.append(best_params)
-        """
 
         return x, split_params(best_params), best_se
 
