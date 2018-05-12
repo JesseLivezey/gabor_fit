@@ -8,6 +8,7 @@ import numpy as np
 
 
 def setup_graph():
+    """Setup the theano graph for all possible operations."""
     n_x = T.lscalar('n_x')
     n_y = T.lscalar('n_y')
     pos_x = T.arange(n_x).dimshuffle(0, 'x', 'x')
@@ -22,6 +23,7 @@ def setup_graph():
     thetap = theta.dimshuffle('x', 'x', 0)
     phip = phi.dimshuffle('x', 'x', 0)
     lkxp = lkx.dimshuffle('x', 'x', 0)
+    lkxp = 2.*np.pi / (2.*np.sqrt(2)+T.exp(lkxp))
     lvxp = lvx.dimshuffle('x', 'x', 0)
     lvyp = lvy.dimshuffle('x', 'x', 0)
 
@@ -112,7 +114,18 @@ def fit_all_function(data):
     grad = T.grad(mse, params)
     return params, mse, se, grad, gabor, n_x, n_y
 
+
+def combine_params(x, y, theta, phi, lkx, lvx, lvy):
+    """Turns individual parameter vectors into a parameter array."""
+    if isinstance(x, theano.tensor.TensorVariable):
+        rval = T.concatenate([x, y, theta, phi, lkx, lvx, lvy])
+    else:
+        rval = np.concatenate([x, y, theta, phi, lkx, lvx, lvy])
+    return rval
+
 def split_params(params):
+    """Splits a parameter vector for a batch of gabors into individual parameter
+    vectors."""
     n_samples = params.shape[0]//7
     x = params[:n_samples].astype('float32')
     y = params[n_samples:2*n_samples].astype('float32')
@@ -122,6 +135,20 @@ def split_params(params):
     lvx = params[5*n_samples:6*n_samples].astype('float32')
     lvy = params[6*n_samples:].astype('float32')
     return x, y, theta, phi, lkx, lvx, lvy
+
+def standardize_params(*params):
+    if len(params) == 1:
+        x, y, theta, phi, lkx, lvx, lvy = split_params(params)
+    else:
+        x, y, theta, phi, lkx, lvx, lvy = params
+    if isinstance(x, theano.tensor.TensorVariable):
+        kx = 2.*np.pi / (2.*np.sqrt(2)+T.exp(lkxp))
+        rval = x, y, theta, phi, kx, T.exp(lvx), T.exp(lvy)
+    else:
+        kx = 2.*np.pi / (2.*np.sqrt(2)+np.exp(lkxp))
+        rval = x, y, theta, phi, kx, np.exp(lvx), np.exp(lvy)
+    return rval
+
 
 class GaborFit(object):
     def __init__(self):
@@ -229,8 +256,8 @@ class GaborFit(object):
         freqs = fft.fftfreq(n_x)[:, np.newaxis] + 1j*fft.fftfreq(n_y)[np.newaxis, :]
 
         thetas = np.linspace(0., np.pi, 8)
-        k_min = 2.*np.pi*min(1./n_x, 1./n_y)
-        k_max = 2.*np.pi*.75
+        k_min = 2.*np.pi/np.sqrt(n_x**2+n_y**2)
+        k_max = 2.*np.pi/2./np.sqrt(2.)
         ks = np.linspace(k_min, k_max, 20, endpoint=True)
 
         def choose_best(best_se, best_params, se, params):
@@ -299,6 +326,17 @@ class GaborFit(object):
         best_se, best_params = choose_best(best_se, best_params, se, params)
 
         x.append(best_params)
+
+        """
+        # Fit all
+        func = self._fit_all
+        res = minimize(func, best_params, method='L-BFGS-B', jac=True)
+        params = res.x
+        se = self._fit_all_se(params)
+        best_se, best_params = choose_best(best_se, best_params, se, params)
+
+        x.append(best_params)
+        """
 
         return x, split_params(best_params), best_se
 
