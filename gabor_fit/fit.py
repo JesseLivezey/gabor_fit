@@ -162,16 +162,20 @@ def standardize_params(*params):
     vy : float
         Variance of the Gabor perpendictular to the oscilation direction.
     """
+    combine = False
     if len(params) == 1:
-        x, y, theta, phi, lkx, lvx, lvy = split_params(params)
+        x, y, theta, phi, lkx, lvx, lvy = split_params(*params)
+        combine = True
     else:
         x, y, theta, phi, lkx, lvx, lvy = params
     if isinstance(x, theano.tensor.TensorVariable):
-        kx = 2.*np.pi / (2.*np.sqrt(2)+T.exp(lkxp))
+        kx = 2.*np.pi / (2.*np.sqrt(2)+T.exp(lkx))
         rval = x, y, theta, phi, kx, T.exp(lvx), T.exp(lvy)
     else:
-        kx = 2.*np.pi / (2.*np.sqrt(2)+np.exp(lkxp))
+        kx = 2.*np.pi / (2.*np.sqrt(2)+np.exp(lkx))
         rval = x, y, theta, phi, kx, np.exp(lvx), np.exp(lvy)
+    if combine:
+        rval = combine_params(*rval)
     return rval
 
 
