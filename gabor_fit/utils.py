@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Jul 21 14:51:13 2014
-
-@author: Greg Martin
-"""
-
 """ This file contains different utility functions that are not connected
 in anyway to the networks presented in the tutorials, but rather help in
 processing the outputs into a more understandable way.
