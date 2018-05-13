@@ -274,9 +274,10 @@ class GaborFit(object):
         freqs = fft.fftfreq(n_x)[:, np.newaxis] + 1j*fft.fftfreq(n_y)[np.newaxis, :]
 
         thetas = np.linspace(0., np.pi, 8)
-        k_min = 2.*np.pi/np.sqrt(n_x**2+n_y**2)
-        k_max = 2.*np.pi/2./np.sqrt(2.)
-        ks = np.linspace(k_min, k_max, 20, endpoint=True)
+        kx_min = 2.*np.pi/np.sqrt(n_x**2+n_y**2)
+        kx_max = 2.*np.pi/2./np.sqrt(2.)
+        kxs = np.linspace(kx_min, kx_max, 20, endpoint=True)
+        lkxs = np.log(2.*np.pi/kxs + 2.*np.sqrt(2))
 
         def choose_best(best_se, best_params, se, params):
             compare = se < best_se
@@ -294,7 +295,7 @@ class GaborFit(object):
             init = np.zeros(7*n_samples)
             init[:n_samples] = n_x/2.
             init[n_samples:2*n_samples] = n_y/2.
-            init[4*n_samples:5*n_samples] = k_min
+            init[4*n_samples:5*n_samples] = lkxs[0]
             init[5*n_samples:6*n_samples] = np.log(vi*(n_x)**2)
             init[6*n_samples:7*n_samples] = np.log(vi*(n_y)**2)
 
@@ -312,10 +313,10 @@ class GaborFit(object):
             func = self._fit_theta_phi_lkx
             func_se = self._fit_theta_phi_lkx_se
             for theta in thetas:
-                for k in ks:
+                for lkx in lkxs:
                     init = params.copy()
                     init[2*n_samples:3*n_samples] = theta
-                    init[4*n_samples:5*n_samples] = k
+                    init[4*n_samples:5*n_samples] = lkx
                     res = minimize(func, init, method='L-BFGS-B', jac=True)
                     params = res.x
                     se = func_se(params)
@@ -337,6 +338,15 @@ class GaborFit(object):
         res = minimize(func, best_params, method='L-BFGS-B', jac=True)
         params = res.x
         se = self._fit_phi_x_y_se(params)
+        best_se, best_params = choose_best(best_se, best_params, se, params)
+
+        x.append(best_params)
+
+        # Fit envelope center and phase
+        func = self._fit_all
+        res = minimize(func, best_params, method='L-BFGS-B', jac=True)
+        params = res.x
+        se = self._fit_all_se(params)
         best_se, best_params = choose_best(best_se, best_params, se, params)
 
         x.append(best_params)
