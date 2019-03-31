@@ -23,7 +23,7 @@ def setup_graph():
     thetap = theta.dimshuffle('x', 'x', 0)
     phip = phi.dimshuffle('x', 'x', 0)
     lkxp = lkx.dimshuffle('x', 'x', 0)
-    lkxp = 2.*np.pi / (2.*np.sqrt(2)+T.exp(lkxp))
+    lkxp = 2. * np.pi / (2. + T.exp(lkxp))
     lvxp = lvx.dimshuffle('x', 'x', 0)
     lvyp = lvy.dimshuffle('x', 'x', 0)
 
